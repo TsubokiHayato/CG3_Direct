@@ -46,8 +46,8 @@ PixcelShaderOutput main(VertexShaderOutPut input)
       
       // output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
        
-        
-        output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+       
+            output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
         output.color.a = gMaterial.color.a * textureColor.a;
         
     }
@@ -58,6 +58,18 @@ PixcelShaderOutput main(VertexShaderOutPut input)
     }
     
     
+    if (textureColor.a <= 0.5f)
+    {
+        discard;
+    }
+    if (textureColor.a == 0.0f)
+    {
+        discard;
+    }
+    if (output.color.a == 0.0f)
+    {
+        discard;
+    }
   
     
     return output;

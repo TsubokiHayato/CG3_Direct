@@ -37,6 +37,7 @@ PixcelShaderOutput main(VertexShaderOutPut input)
     //float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
     float4 tranceformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, tranceformedUV.xy);
+    output.color = gMaterial.color * textureColor;
     if (output.color.a == 0)
     {
         discard;

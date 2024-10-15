@@ -71,6 +71,7 @@ struct Material {
 	int32_t enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
+	float shininess;
 };
 
 struct  TransformationMatrix {
@@ -91,6 +92,11 @@ struct MaterialData {
 struct ModelData {
 	std::vector<VertexData> vertices;
 	MaterialData material;
+};
+
+struct CameraForGPU
+{
+	Vector3 worldPosition;
 };
 
 struct D3DResourceLeakChecker
@@ -946,7 +952,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//RootParameter作成。02_01追加//02_03更新
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaderでつかう
 	rootParameters[0].Descriptor.ShaderRegister = 0;//レジスタ番号0とバインド
@@ -963,6 +969,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaderでつかう
 	rootParameters[3].Descriptor.ShaderRegister = 1;//レジスタ番号1とバインド
+
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaderでつかう
+	rootParameters[4].Descriptor.ShaderRegister = 2;//レジスタ番号1とバインド
 
 	descriptionRootSignature.pParameters = rootParameters;//ルートパラメータ配列へのポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);//配列の長さ
@@ -1140,6 +1150,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	materialData->enableLighting = true;
 	materialData->uvTransform = MakeIdentity4x4();
+	materialData->shininess = {};
+
 
 #pragma endregion
 
@@ -1178,6 +1190,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	directionalLightData->color = { 1.0f,1.0f,1.0f,1.0f };
 	directionalLightData->direction = { 0.5f,-0.5f,0.0f };
 	directionalLightData->intensity = 1.0f;
+
+
+
+#pragma endregion
+
+
+#pragma region cameraWorldPos
+	//平行光源用用のリソースを作る。今回はColor1つ分のサイズを用意する
+	Microsoft::WRL::ComPtr <ID3D12Resource> cameraForGPUResource =
+		CreateBufferResource(device, sizeof(DirectionalLight));
+	//平行光源用にデータを書き込む
+	CameraForGPU* cameraForGPUData = nullptr;
+	//書き込むためのアドレスを取得
+	cameraForGPUResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraForGPUData));
+
+	cameraForGPUData->worldPosition = {};
 
 
 
@@ -1294,7 +1322,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region ModelData
 	//モデルよみこみ
-	ModelData modelData = LoadObjFile("resources", "fence.obj");
+	ModelData modelData = LoadObjFile("resources", "axis.obj");
 	//頂点リソースを作る
 	Microsoft::WRL::ComPtr <ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 	//頂点バッファビューを作成する
@@ -1444,13 +1472,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			
 
 			ImGui::ColorEdit4("material.color", &materialData->color.x);
+			ImGui::SliderFloat("material", &materialData->shininess, 0.0f, 30.0f);
 			ImGui::SliderFloat("intensity", &directionalLightData->intensity, 0.0f, 30.0f);
+
 			ImGui::Text("Sprite");
 			ImGui::DragFloat("UVTranslate", &uvTransFormSprite.translate.x, 0.01f, -1000.0f, 1000.0f);
 			ImGui::DragFloat("UVScale", &uvTransFormSprite.scale.x, 0.01f, -10.0f, 10.0f);
 
 			ImGui::SliderAngle("UVRotate", &uvTransFormSprite.rotate.z);
 
+			ImGui::SliderFloat3("camera", &cameraForGPUData->worldPosition.x, 0.0f, 30.0f);
 			/*--------
 			ゲームの処理
 			---------*/
@@ -1555,6 +1586,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(4, cameraForGPUResource->GetGPUVirtualAddress());
 
 
 			//描画

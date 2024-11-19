@@ -1,5 +1,5 @@
 #include<cmath>
-
+#include"Vector3.h"
 struct Matrix4x4 final {
 	float m[4][4];
 };
@@ -8,13 +8,6 @@ struct Matrix3x3 final {
 	float m[3][3];
 };
 
-struct Vector3
-{
-	float x;
-	float y;
-	float z;
-
-};
 Matrix4x4 MakeRotateXMatrix(float radian) {
 	Matrix4x4 result = {};
 

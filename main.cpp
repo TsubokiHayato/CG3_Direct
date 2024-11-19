@@ -34,6 +34,8 @@
 
 #include<wrl.h>
 
+#include<random>
+
 # define PI 3.14159265359f
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -58,6 +60,11 @@ struct Transform {
 	Vector3 scale;
 	Vector3 rotate;
 	Vector3 translate;
+};
+
+struct Particle {
+	Transform transform;
+	Vector3 velocity;
 };
 
 struct VertexData {
@@ -1457,13 +1464,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-
-	Transform transforms[kNumInstance];
+	Particle particles[kNumInstance];
 	for (uint32_t index = 0; index < kNumInstance; ++index) {
-		transforms[index].scale = { 1.0f,1.0f,1.0f };
-		transforms[index].rotate = { 0.0f,3.14f,0.0f };
-		transforms[index].translate = { index * 0.1f,index * 0.1f ,index * 0.1f };
+		particles[index].transform.scale = { 1.0f,1.0f,1.0f };
+		particles[index].transform.rotate = { 0.0f,3.14f,0.0f };
+		particles[index].transform.translate = { index * 0.1f,index * 0.1f ,index * 0.1f };
+
+		particles[index].velocity = { 0.0f,1.0f,0.0f };
 	}
+	const float kDeltaTime = 1.0f / 60.0f;
+
+	std::random_device seedGenerator;
+	std::mt19937 randomEngine(seedGenerator());
+
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
 
 	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -1492,9 +1506,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Text("Material");
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			for (uint32_t index = 0; index < kNumInstance; ++index) {
-				ImGui::DragFloat3("Scale", &transforms[index].scale.x, 0.01f, -10.0f, 10.0f);
-				ImGui::DragFloat3("Rotate", &transforms[index].rotate.x, 0.01f, -10.0f, 10.0f);
-				ImGui::DragFloat3("Translate", &transforms[index].translate.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Scale", &particles[index].transform.scale.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Rotate", &particles[index].transform.rotate.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Translate", &particles[index].transform.translate.x, 0.01f, -10.0f, 10.0f);
 			}
 
 			ImGui::ColorEdit4("material.color", &materialData->color.x);
@@ -1510,8 +1524,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			---------*/
 
 			for (uint32_t index = 0; index < kNumInstance; ++index) {
+
+
+				particles[index].transform.translate = {distribution(randomEngine),distribution(randomEngine) ,distribution(randomEngine) };
+				particles[index].velocity = { distribution(randomEngine),distribution(randomEngine) ,distribution(randomEngine) };
+
+
+				particles[index].transform.translate += particles[index].velocity * kDeltaTime;
+			}
+
+
+			for (uint32_t index = 0; index < kNumInstance; ++index) {
 				Matrix4x4 worldMatrix =
-					MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
+					MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 				instancingData[index].WVP = worldViewProjectionMatrix;
 				instancingData[index].World = worldMatrix;
@@ -1590,7 +1615,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//SRVのDescriptorTableの先頭を設定。2はrootParameter[2]である。
 			//commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
-			commandList->SetGraphicsRootDescriptorTable(2,  textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			//描画
 

@@ -1,3 +1,4 @@
+
 #include"Object3d.hlsli"
 
 struct TransformationMatrix
@@ -15,6 +16,7 @@ struct VertexShaderInput
     float2 texcoord : TEXCOORD0;
     float3 normal : NORMAL0;
 };
+
 
 VertexShaderOutPut main(VertexShaderInput input,uint instanceId : SV_InstanceID)
 {

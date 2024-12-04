@@ -1,3 +1,4 @@
+
 #include"Object3d.hlsli"
 
 struct Material
@@ -8,14 +9,20 @@ struct Material
 };
 
 
+struct DirectionalLight
+{
+    float4 color;
+    float3 direction;
+    float intensity;
+};
 
-//ƒRƒ“ƒXƒ^ƒ“ƒgƒoƒbƒtƒ@‚Ì’è‹`
-//g—p—á : ConstantBuffer<\‘¢‘Ì> •Ï”–¼ : register(b0);
+//ã‚³ãƒ³ã‚¹ã‚¿ãƒ³ãƒˆãƒãƒƒãƒ•ã‚¡ã®å®šç¾©
+//ä½¿ç”¨ä¾‹ : ConstantBuffer<æ§‹é€ ä½“> å¤‰æ•°å : register(b0);
 ConstantBuffer<Material> gMaterial : register(b0);
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
-//ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 
+//ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 struct PixcelShaderOutput
 {
     float4 color : SV_TARGET0;
@@ -30,6 +37,7 @@ PixcelShaderOutput main(VertexShaderOutPut input)
     //float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
     float4 tranceformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, tranceformedUV.xy);
+
    
     output.color = gMaterial.color * textureColor;
     if (output.color.a == 0.0)

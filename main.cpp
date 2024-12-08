@@ -56,15 +56,27 @@ struct Vector4
 	float w;
 };
 
+
+
 struct Transform {
 	Vector3 scale;
 	Vector3 rotate;
 	Vector3 translate;
 };
-
-struct Particle {
+struct Particle
+{
 	Transform transform;
 	Vector3 velocity;
+	Vector4 color;
+	float lifeTime;
+	float currentTime;
+};
+
+struct ParticleForGPU
+{
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Vector4 color;
 };
 
 struct VertexData {
@@ -614,6 +626,17 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 }
 
+
+
+Particle MakeNewParticle(std::mt19937& randamEngine) {
+	std::uniform_real_distribution<float> positionDist(-1.0f, 1.0f);
+	Particle particle;
+	particle.transform.scale = { 1.0f,1.0f,1.0f };
+	particle.transform.rotate = { 0.0f,3.14f,0.0f };
+	particle.transform.translate = { positionDist(randamEngine),positionDist(randamEngine),positionDist(randamEngine) };
+	particle.velocity = { positionDist(randamEngine),positionDist(randamEngine),positionDist(randamEngine) };
+	return particle;
+}
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	CoInitializeEx(0, COINIT_MULTITHREADED);
@@ -1026,7 +1049,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	/*------------
 	  InputLayOut
 	------------*/
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[4] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
 	inputElementDescs[0].SemanticIndex = 0;
 	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -1042,6 +1065,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
 	inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 
+
+	inputElementDescs[3].SemanticName = "COLOR";
+	inputElementDescs[3].SemanticIndex = 0;
+	inputElementDescs[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	inputElementDescs[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;
@@ -1099,7 +1127,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//Depthの機能を有効化
 	depthStencilDesc.DepthEnable = true;
 	//書き込みします
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	//比較関数はLessEqual
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
@@ -1313,7 +1341,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region ModelData
 	//モデルよみこみ
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "barrier.obj");
 	//頂点リソースを作る
 	Microsoft::WRL::ComPtr <ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 	//頂点バッファビューを作成する
@@ -1333,7 +1361,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//Textureを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
+	DirectX::ScratchImage mipImages = LoadTexture("Resources/barrier.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	Microsoft::WRL::ComPtr <ID3D12Resource> textureResource = CreateTextureResource(device, metadata);
 	UploadTextureData(textureResource.Get(), mipImages);
@@ -1388,16 +1416,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//ParticleResource
 
 
-	const uint32_t kNumInstance = 10;//インスタンス数
+	const uint32_t kNumMaxInstance = 100;//インスタンス数
 	//Instancing用のTransformationMatrixリソースを作る
 	Microsoft::WRL::ComPtr<ID3D12Resource>instancingResource =
-		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+		CreateBufferResource(device, sizeof(ParticleForGPU) * kNumMaxInstance);
 	//書き込むためのアドレスを取得
-	TransformationMatrix* instancingData = nullptr;
+	ParticleForGPU* instancingData = nullptr;
 	instancingResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
+	for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
 		instancingData[index].WVP = MakeIdentity4x4();
 		instancingData[index].World = MakeIdentity4x4();
+		instancingData[index].color = { 1.0f,1.0f,1.0f,1.0f };
 	}
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
@@ -1406,8 +1435,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	instancingSrvDesc.Buffer.NumElements = kNumInstance;
-	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	instancingSrvDesc.Buffer.NumElements = kNumMaxInstance;
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(ParticleForGPU);
 	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
 	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(instancingResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
@@ -1452,6 +1481,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+	Microsoft::WRL::ComPtr<ID3D12Resource> instasingResource = CreateBufferResource(device, sizeof(ParticleForGPU) * kNumMaxInstance);
+
+
 
 
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-15.0f} };
@@ -1464,27 +1496,35 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-	Particle particles[kNumInstance];
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
-		particles[index].transform.scale = { 1.0f,1.0f,1.0f };
-		particles[index].transform.rotate = { 0.0f,3.14f,0.0f };
-		particles[index].transform.translate = { index * 0.1f,index * 0.1f ,index * 0.1f };
-
-		particles[index].velocity = { 0.0f,1.0f,0.0f };
-	}
 	const float kDeltaTime = 1.0f / 60.0f;
-
+	Particle particles[kNumMaxInstance];
 	std::random_device seedGenerator;
 	std::mt19937 randomEngine(seedGenerator());
-
 	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
+	std::uniform_real_distribution<float> distLifeTime(3.0f, 5.0f);
+
+
+
+	for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
+		particles[index].transform.scale = { 1.0f,1.0f,1.0f };
+		particles[index].transform.rotate = { 0.0f,3.14f,0.0f };
+		particles[index].transform.translate = { 0.0f,0.0f ,index * 0.1f };
+
+		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine) };
+		particles[index].color = { distColor(randomEngine),distColor(randomEngine),distColor(randomEngine),1.0f };
+		instancingData[index].color = particles[index].color;
+		
+		particles[index].lifeTime = distLifeTime(randomEngine);
+		particles[index].currentTime = 0.0f;
+	}
 
 	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 	projectionMatrix = MakePerspectiveMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 
 
-
+	uint32_t numInstance = 10;
 
 	//ウィンドウの×ボタンんが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1505,7 +1545,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			ImGui::Text("Material");
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-			for (uint32_t index = 0; index < kNumInstance; ++index) {
+
+			for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
 				ImGui::DragFloat3("Scale", &particles[index].transform.scale.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Rotate", &particles[index].transform.rotate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Translate", &particles[index].transform.translate.x, 0.01f, -10.0f, 10.0f);
@@ -1523,26 +1564,29 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ゲームの処理
 			---------*/
 
-			for (uint32_t index = 0; index < kNumInstance; ++index) {
 
+			for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
+				if (particles[index].lifeTime <= particles[index].currentTime) {
 
-				particles[index].transform.translate = {distribution(randomEngine),distribution(randomEngine) ,distribution(randomEngine) };
-				particles[index].velocity = { distribution(randomEngine),distribution(randomEngine) ,distribution(randomEngine) };
+					//particles[index].lifeTime = distLifeTime(randomEngine);
+					continue;
+				}
 
-
+				//particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 				particles[index].transform.translate += particles[index].velocity * kDeltaTime;
-			}
 
-
-			for (uint32_t index = 0; index < kNumInstance; ++index) {
-				Matrix4x4 worldMatrix =
-					MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
+				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+
+				particles[index].currentTime += kDeltaTime;
 				instancingData[index].WVP = worldViewProjectionMatrix;
 				instancingData[index].World = worldMatrix;
-
-
+				instancingData[index].color = particles[index].color;
+				float alpha = 1.0f - particles[index].currentTime / particles[index].lifeTime;
+				instancingData[index].color.w = alpha;
+				++numInstance;
 			}
+
 
 
 
@@ -1619,7 +1663,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//描画
 
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
+			commandList->DrawInstanced(UINT(modelData.vertices.size()), numInstance, 0, 0);
 
 
 			//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());

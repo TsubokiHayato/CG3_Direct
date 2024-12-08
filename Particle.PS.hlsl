@@ -1,4 +1,4 @@
-#include"Object3d.hlsli"
+#include"Particle.hlsli"
 
 struct Material
 {
@@ -19,6 +19,7 @@ SamplerState gSampler : register(s0);
 struct PixcelShaderOutput
 {
     float4 color : SV_TARGET0;
+    
 };
 
 
@@ -31,7 +32,7 @@ PixcelShaderOutput main(VertexShaderOutPut input)
     float4 tranceformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, tranceformedUV.xy);
    
-    output.color = gMaterial.color * textureColor;
+    output.color = gMaterial.color * textureColor*input.color;
     if (output.color.a == 0.0)
     {
         discard;

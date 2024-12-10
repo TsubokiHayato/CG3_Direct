@@ -35,7 +35,6 @@
 #include<wrl.h>
 
 #include<random>
-#include"numbers"
 
 # define PI 3.14159265359f
 
@@ -1482,6 +1481,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+	Microsoft::WRL::ComPtr<ID3D12Resource> instasingResource = CreateBufferResource(device, sizeof(ParticleForGPU) * kNumMaxInstance);
+
 
 
 
@@ -1513,7 +1514,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine) };
 		particles[index].color = { distColor(randomEngine),distColor(randomEngine),distColor(randomEngine),1.0f };
 		instancingData[index].color = particles[index].color;
-
+		
 		particles[index].lifeTime = distLifeTime(randomEngine);
 		particles[index].currentTime = 0.0f;
 	}
@@ -1559,11 +1560,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			ImGui::SliderAngle("UVRotate", &uvTransFormSprite.rotate.z);
 
-			ImGui::Begin("Camera");
-			ImGui::DragFloat3("Scale", &cameraTransform.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat3("Translate", &cameraTransform.translate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::End();
 			/*--------
 			ゲームの処理
 			---------*/
@@ -1579,20 +1575,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				//particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 				particles[index].transform.translate += particles[index].velocity * kDeltaTime;
 
-				Matrix4x4 backToFrontMatrix = MakeRotateYMatrix(std::numbers::pi_v<float>);
-				Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
-				billboardMatrix.m[3][0] = 0;
-				billboardMatrix.m[3][1] = 0;
-				billboardMatrix.m[3][2] = 0;
-
-				// 回転部分をVector3に変換
-				Vector3 rotation;
-				rotation.x = atan2(billboardMatrix.m[2][1], billboardMatrix.m[2][2]);
-				rotation.y = atan2(-billboardMatrix.m[2][0], sqrt(billboardMatrix.m[2][1] * billboardMatrix.m[2][1] + billboardMatrix.m[2][2] * billboardMatrix.m[2][2]));
-				rotation.z = atan2(billboardMatrix.m[1][0], billboardMatrix.m[0][0]);
-
-
-				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, rotation, particles[index].transform.translate);
+				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 				particles[index].currentTime += kDeltaTime;

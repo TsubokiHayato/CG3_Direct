@@ -123,17 +123,6 @@ Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Ve
 
 	return result;
 }
-
-
-
-	Matrix4x4 MakeAffineMatrix(Matrix4x4 scaleMatrix, Matrix4x4 rotateMatrix, Matrix4x4 translateMatrix) {
-		// スケール行列と回転行列を掛け合わせる
-		Matrix4x4 scaleRotateMatrix = Multiply(rotateMatrix, scaleMatrix);
-		// その結果を平行移動行列と掛け合わせる
-		Matrix4x4 affineMatrix = Multiply(translateMatrix, scaleRotateMatrix);
-		return affineMatrix;
-	}
-
 //透視投影行列
 Matrix4x4 MakePerspectiveMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
 	Matrix4x4 result = {};

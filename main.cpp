@@ -34,6 +34,8 @@
 
 #include<wrl.h>
 
+
+#include"MT_Collision.h"
 #include<random>
 #include"numbers"
 
@@ -80,6 +82,18 @@ struct ParticleForGPU
 	Vector4 color;
 };
 
+struct Emitter {
+	Transform transform;//エミッターの位置
+	uint32_t count;//発生数
+	float frequency;//発生頻度
+	float frequencyTimer;//経過時間
+};
+
+
+struct AccelerationField {
+	Vector3 acceleration;
+	AABB area;
+};
 struct VertexData {
 	Vector4 pos;
 	Vector2 texcoord;
@@ -627,17 +641,38 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 }
 
-
-
-Particle MakeNewParticle(std::mt19937& randamEngine) {
+Particle MakeNewParticle(std::mt19937& randomEngine, const Vector3& translate) {
 	std::uniform_real_distribution<float> positionDist(-1.0f, 1.0f);
+	std::uniform_real_distribution<float> velocityDist(-0.1f, 0.1f);
+	std::uniform_real_distribution<float> colorDist(0.0f, 1.0f);
+	std::uniform_real_distribution<float> lifeTimeDist(1.0f, 5.0f);
+
+
 	Particle particle;
 	particle.transform.scale = { 1.0f,1.0f,1.0f };
 	particle.transform.rotate = { 0.0f,3.14f,0.0f };
-	particle.transform.translate = { positionDist(randamEngine),positionDist(randamEngine),positionDist(randamEngine) };
-	particle.velocity = { positionDist(randamEngine),positionDist(randamEngine),positionDist(randamEngine) };
+	particle.transform.translate = { 0.0f,0.0f , 0.0f };
+	particle.transform.translate = translate;
+	particle.velocity = { velocityDist(randomEngine), velocityDist(randomEngine), velocityDist(randomEngine) };
+	particle.color = { colorDist(randomEngine), colorDist(randomEngine), colorDist(randomEngine), 1.0f };
+
+	particle.lifeTime = lifeTimeDist(randomEngine);
+	particle.currentTime = 0.0f;
+
+
+
+
 	return particle;
 }
+std::list<Particle>Emit(const Emitter& emitter, std::mt19937& randamEngine, Vector3 translate) {
+	std::list<Particle> particles;
+	for (uint32_t i = 0; i < emitter.count; ++i) {
+		particles.push_back(MakeNewParticle(randamEngine, translate));
+	}
+	return particles;
+}
+
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	CoInitializeEx(0, COINIT_MULTITHREADED);
@@ -1496,7 +1531,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	const float kDeltaTime = 1.0f / 60.0f;
-	Particle particles[kNumMaxInstance];
+
+	std::list<Particle> particles;
 	std::random_device seedGenerator;
 	std::mt19937 randomEngine(seedGenerator());
 	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
@@ -1504,26 +1540,40 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::uniform_real_distribution<float> distLifeTime(3.0f, 5.0f);
 
 
-
+	// 初期化部分
 	for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
-		particles[index].transform.scale = { 1.0f,1.0f,1.0f };
-		particles[index].transform.rotate = { 0.0f,3.14f,0.0f };
-		particles[index].transform.translate = { 0.0f,0.0f ,index * 0.1f };
+		Particle particle;
+		particle.transform.scale = { 1.0f,1.0f,1.0f };
+		particle.transform.rotate = { 0.0f,3.14f,0.0f };
+		particle.transform.translate = { 0.0f,0.0f ,index * 0.1f };
 
-		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine) };
-		particles[index].color = { distColor(randomEngine),distColor(randomEngine),distColor(randomEngine),1.0f };
-		instancingData[index].color = particles[index].color;
+		particle.velocity = { distribution(randomEngine), distribution(randomEngine) };
+		particle.color = { distColor(randomEngine),distColor(randomEngine),distColor(randomEngine),1.0f };
+		instancingData[index].color = particle.color;
 
-		particles[index].lifeTime = distLifeTime(randomEngine);
-		particles[index].currentTime = 0.0f;
+		particle.lifeTime = distLifeTime(randomEngine);
+		particle.currentTime = 0.0f;
+
+		particles.push_back(particle);
 	}
 
+	Vector3 particleStartPos = {};
 	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 	projectionMatrix = MakePerspectiveMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 
 
 	uint32_t numInstance = 10;
+
+	Emitter emitter = {};
+	emitter.count = 3;
+	emitter.frequency = 0.5f;
+	emitter.frequencyTimer = 0.0f;
+
+	AccelerationField accelerationField = {};
+	accelerationField.acceleration = { 15.0f,0.0f,0.0f };
+	accelerationField.area.min = { -1.0f,-1.0f,-1.0f };
+	accelerationField.area.max = { 1.0f,1.0f,1.0f };
 
 	//ウィンドウの×ボタンんが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1545,10 +1595,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Text("Material");
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-			for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
-				ImGui::DragFloat3("Scale", &particles[index].transform.scale.x, 0.01f, -10.0f, 10.0f);
-				ImGui::DragFloat3("Rotate", &particles[index].transform.rotate.x, 0.01f, -10.0f, 10.0f);
-				ImGui::DragFloat3("Translate", &particles[index].transform.translate.x, 0.01f, -10.0f, 10.0f);
+			for (auto& particle : particles) {
+				ImGui::DragFloat3("Scale", &particle.transform.scale.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Rotate", &particle.transform.rotate.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Translate", &particle.transform.translate.x, 0.01f, -10.0f, 10.0f);
+
 			}
 
 			ImGui::ColorEdit4("material.color", &materialData->color.x);
@@ -1564,21 +1615,41 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat3("Translate", &cameraTransform.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::End();
+
+			ImGui::Begin("AddParticle");
+			if (ImGui::Button("AddParticle")) {
+				particles.splice(particles.end(), Emit(emitter, randomEngine, particleStartPos));
+			}
+			ImGui::End();
+
 			/*--------
 			ゲームの処理
 			---------*/
 
+			cameraTransform.translate.z--;
 
-			for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
-				if (particles[index].lifeTime <= particles[index].currentTime) {
-
-					//particles[index].lifeTime = distLifeTime(randomEngine);
+			emitter.frequency += kDeltaTime;
+			if (emitter.frequency >= emitter.frequencyTimer) {
+				particles.splice(particles.end(), Emit(emitter, randomEngine, particleStartPos));
+				emitter.frequencyTimer -= emitter.frequency;
+			}
+			// ゲームの処理
+			numInstance = 0;
+			for (auto it = particles.begin(); it != particles.end(); ) {
+				if (it->lifeTime <= it->currentTime) {
+					it = particles.erase(it);
 					continue;
 				}
 
-				//particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-				particles[index].transform.translate += particles[index].velocity * kDeltaTime;
 
+
+
+
+				if (IsCollision(accelerationField.area, it->transform.translate)) {
+					it->velocity += accelerationField.acceleration * kDeltaTime;
+				}
+
+				it->transform.translate += it->velocity * kDeltaTime;
 				Matrix4x4 backToFrontMatrix = MakeRotateYMatrix(std::numbers::pi_v<float>);
 				Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
 				billboardMatrix.m[3][0] = 0;
@@ -1592,17 +1663,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				rotation.z = atan2(billboardMatrix.m[1][0], billboardMatrix.m[0][0]);
 
 
-				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, rotation, particles[index].transform.translate);
+
+				Matrix4x4 worldMatrix = MakeAffineMatrix(it->transform.scale, rotation, it->transform.translate);
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
-				particles[index].currentTime += kDeltaTime;
-				instancingData[index].WVP = worldViewProjectionMatrix;
-				instancingData[index].World = worldMatrix;
-				instancingData[index].color = particles[index].color;
-				float alpha = 1.0f - particles[index].currentTime / particles[index].lifeTime;
-				instancingData[index].color.w = alpha;
-				++numInstance;
+				it->currentTime += kDeltaTime;
+				if (numInstance < kNumMaxInstance) {
+					instancingData[numInstance].WVP = worldViewProjectionMatrix;
+					instancingData[numInstance].World = worldMatrix;
+					instancingData[numInstance].color = it->color;
+					float alpha = 1.0f - it->currentTime / it->lifeTime;
+					instancingData[numInstance].color.w = alpha;
+					++numInstance;
+					++it;
+				}
+
 			}
+
 
 
 

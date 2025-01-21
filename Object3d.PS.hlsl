@@ -36,7 +36,7 @@ struct PixcelShaderOutput
     float4 color : SV_TARGET0;
 };
 
-
+//BllinPhongモデルを使用したライティング
 PixcelShaderOutput main(VertexShaderOutPut input)
 {
     PixcelShaderOutput output;

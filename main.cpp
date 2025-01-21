@@ -1150,7 +1150,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	materialData->enableLighting = true;
 	materialData->uvTransform = MakeIdentity4x4();
-	materialData->shininess = {};
+	materialData->shininess = 1.0f;
 
 
 #pragma endregion
@@ -1322,7 +1322,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region ModelData
 	//モデルよみこみ
-	ModelData modelData = LoadObjFile("resources", "axis.obj");
+	ModelData modelData = LoadObjFile("resources", "plane.obj");
 	//頂点リソースを作る
 	Microsoft::WRL::ComPtr <ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 	//頂点バッファビューを作成する
@@ -1472,7 +1472,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			
 
 			ImGui::ColorEdit4("material.color", &materialData->color.x);
-			ImGui::SliderFloat("material", &materialData->shininess, 0.0f, 30.0f);
+			ImGui::SliderFloat("shininess", &materialData->shininess, 0.0f, 30.0f);
 			ImGui::SliderFloat("intensity", &directionalLightData->intensity, 0.0f, 30.0f);
 
 			ImGui::Text("Sprite");

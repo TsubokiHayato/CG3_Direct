@@ -1200,7 +1200,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region cameraWorldPos
 	//平行光源用用のリソースを作る。今回はColor1つ分のサイズを用意する
 	Microsoft::WRL::ComPtr <ID3D12Resource> cameraForGPUResource =
-		CreateBufferResource(device, sizeof(DirectionalLight));
+		CreateBufferResource(device, sizeof(CameraForGPU));
 	//平行光源用にデータを書き込む
 	CameraForGPU* cameraForGPUData = nullptr;
 	//書き込むためのアドレスを取得
@@ -1475,8 +1475,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			
 
 			ImGui::ColorEdit4("material.color", &materialData->color.x);
-			ImGui::SliderFloat("shininess", &materialData->shininess, 0.0f, 30.0f);
-			ImGui::SliderFloat("intensity", &directionalLightData->intensity, 0.0f, 30.0f);
+			ImGui::SliderFloat("shininess", &materialData->shininess, 0.0f, 1000.0f);
+
+		//	ImGui::SliderFloat("intensity", &directionalLightData->intensity, 0.0f, 200.0f);
+			ImGui::DragFloat3("directionalLight.direction", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
 
 			ImGui::Text("Sprite");
 			ImGui::DragFloat("UVTranslate", &uvTransFormSprite.translate.x, 0.01f, -1000.0f, 1000.0f);
@@ -1484,11 +1486,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			ImGui::SliderAngle("UVRotate", &uvTransFormSprite.rotate.z);
 
-			ImGui::SliderFloat3("camera", &cameraForGPUData->worldPosition.x, 0.0f, 30.0f);
+		
+			ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f, -10.0f, 10.0f);
 			/*--------
 			ゲームの処理
 			---------*/
-
+			cameraForGPUData->worldPosition = cameraTransform.translate;
 			//transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
@@ -1497,9 +1500,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 			wvpData->WVP = worldViewProjectionMatrix;
-
 			wvpData->World = worldMatrix;
 			wvpData->WorldInvTranspose = Transpose(Inverse(worldMatrix));
+
+
 
 			Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransFormSprite.scale, uvTransFormSprite.rotate, uvTransFormSprite.translate);
 
@@ -1572,6 +1576,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			commandList->RSSetViewports(1, &viewport);//viewPortを設定
 			commandList->RSSetScissorRects(1, &scissorRect);//Scissorを設定
+
+
 			//RootSignatureを設定。
 			commandList->SetGraphicsRootSignature(rootSignature.Get());
 			commandList->SetPipelineState(graphicsPipeLineState.Get());//PSOを設定
@@ -1593,8 +1599,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 			//描画
-
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+
 
 
 

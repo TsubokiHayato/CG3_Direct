@@ -42,46 +42,33 @@ PixcelShaderOutput main(VertexShaderOutPut input)
     PixcelShaderOutput output;
   
     
-    //float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
+    
     float4 tranceformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, tranceformedUV.xy);
    
-    
     if (gMaterial.enableLighting != 0)
     {
         float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
         float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
-      
-    //  // output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
-       
-       
-    //    output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
-    //    output.color.a = gMaterial.color.a * textureColor.a;
-        
-        
-        
+
         float3 toEye = normalize(gCamera.worldPosition - input.worldPosition);
         float3 reflectLight = reflect(gDirectionalLight.direction, normalize(input.normal));
-        
+
         float RtoE = dot(reflectLight, toEye);
-        float specularPow = pow(saturate(RtoE), gMaterial.shininess);
-        
-        float3 diffuse =
-        gMaterial.color.rgb * textureColor.rgb *gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
-        
-        float3 specular =
-        gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow * float3(1.0f, 1.0f, 1.0f);
-        
+        float3 halfVector = normalize(-gDirectionalLight.direction + toEye);
+        float NDotH = dot(normalize(input.normal), halfVector);
+        float specularPow = pow(saturate(NDotH), gMaterial.shininess);
+
+        float3 diffuse = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+        float3 specular = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow * float3(1.0f, 1.0f, 1.0f);
+
         output.color.rgb = diffuse + specular;
         output.color.a = gMaterial.color.a * textureColor.a;
-        
     }
     else
     {
-        //output.color = gMaterial.color * textureColor;
         output.color = gMaterial.color * textureColor;
     }
-    
     
     if (textureColor.a <= 0.5f)
     {

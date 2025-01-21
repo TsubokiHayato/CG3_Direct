@@ -86,6 +86,15 @@ Matrix4x4 MakeTranslateMatrix(const Vector3& translate) {
 	return translateMatrix;
 }
 
+Matrix4x4 Transpose(const Matrix4x4& m) {
+	Matrix4x4 result = {};
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) {
+			result.m[i][j] = m.m[j][i];
+		}
+	}
+	return result;
+}
 
 // スケールベクトルからスケール行列を作成する関数
 Matrix4x4 MakeScaleMatrix(const Vector3& scale) {

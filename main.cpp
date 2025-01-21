@@ -77,6 +77,7 @@ struct Material {
 struct  TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+	Matrix4x4 WorldInvTranspose;
 };
 
 struct DirectionalLight {
@@ -1225,6 +1226,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//単位行列を書き込んでいく
 	wvpData->WVP = MakeIdentity4x4();
 	wvpData->World = MakeIdentity4x4();
+	wvpData->WorldInvTranspose = MakeIdentity4x4();
 
 
 #pragma endregion
@@ -1290,6 +1292,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//単位行列を書き込んでおく
 	transformationMatrixDataSprite->WVP = MakeIdentity4x4();
 	transformationMatrixDataSprite->World = MakeIdentity4x4();
+	transformationMatrixDataSprite->WorldInvTranspose = MakeIdentity4x4();
 
 #pragma endregion
 
@@ -1322,7 +1325,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region ModelData
 	//モデルよみこみ
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "sphere.obj");
 	//頂点リソースを作る
 	Microsoft::WRL::ComPtr <ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 	//頂点バッファビューを作成する
@@ -1496,7 +1499,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			wvpData->WVP = worldViewProjectionMatrix;
 
 			wvpData->World = worldMatrix;
-
+			wvpData->WorldInvTranspose = Transpose(Inverse(worldMatrix));
 
 			Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransFormSprite.scale, uvTransFormSprite.rotate, uvTransFormSprite.translate);
 
